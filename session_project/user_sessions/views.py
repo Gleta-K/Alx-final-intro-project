@@ -1,35 +1,76 @@
-from django.contrib.auth import authenticate, login, logout
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-import json
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from rest_framework.authtoken.models import Token
+from rest_framework.views import APIView
+from django.contrib.auth import authenticate
+from django.utils import timezone
+from datetime import timedelta
+
+from .models import MonitoredApp, AppSession
+from .serializers import (
+    UserSerializer,
+    MonitoredAppSerializer,
+    AppSessionSerializer
+)
 
 
-@csrf_exempt
-def login_view(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        username = data.get("username")
-        password = data.get("password")
-
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user)
-            return JsonResponse({"message": "Login successful"})
-        else:
-            return JsonResponse({"error": "Invalid credentials"}, status=401)
-
-    return JsonResponse({"error": "Use POST"}, status=405)
+class RegisterView(generics.CreateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]
 
 
-def protected_view(request):
-    if request.user.is_authenticated:
-        return JsonResponse({"message": "Authenticated", "user": request.user.username})
-    return JsonResponse({"error": "Unauthorized"}, status=401)
+class LoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        user = authenticate(
+            username=request.data.get("username"),
+            password=request.data.get("password")
+        )
+
+        if user:
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({"token": token.key})
+
+        return Response({"error": "Invalid credentials"}, status=401)
 
 
-def logout_view(request):
-    if request.method == "POST":
-        logout(request)
-        return JsonResponse({"message": "Logged out"})
-    return JsonResponse({"error": "Use POST"}, status=405)
+class AddAppView(generics.CreateAPIView):
+    serializer_class = MonitoredAppSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class MyAppsView(generics.ListAPIView):
+    serializer_class = MonitoredAppSerializer
+
+    def get_queryset(self):
+        return MonitoredApp.objects.filter(user=self.request.user)
+
+
+class StartSessionView(generics.CreateAPIView):
+    serializer_class = AppSessionSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class CheckSessionView(APIView):
+
+    def get(self, request, session_id):
+        try:
+            session = AppSession.objects.get(id=session_id, user=request.user)
+
+            limit = session.monitored_app.session_limit_minutes
+            expiry_time = session.start_time + timedelta(minutes=limit)
+
+            if timezone.now() > expiry_time:
+                session.is_active = False
+                session.save()
+                return Response({"status": "expired"})
+
+            return Response({"status": "active"})
+
+        except AppSession.DoesNotExist:
+            return Response({"error": "Session not found"}, status=404)
