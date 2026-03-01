@@ -1,63 +1,35 @@
-from django.http import JsonResponse
+from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
 import json
 
 
 @csrf_exempt
 def login_view(request):
-    if request.method == "GET":
-        return JsonResponse({
-            "message": "Use POST to log in",
-            "required_fields": ["username", "password"]
-        }, status=200)
-
     if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            username = data.get("username")
-            password = data.get("password")
+        data = json.loads(request.body)
+        username = data.get("username")
+        password = data.get("password")
 
-            if not username or not password:
-                return JsonResponse(
-                    {"error": "Username and password required"},
-                    status=400
-                )
+        user = authenticate(request, username=username, password=password)
 
-            # Fake authentication for now
-            request.session["username"] = username
+        if user is not None:
+            login(request, user)
+            return JsonResponse({"message": "Login successful"})
+        else:
+            return JsonResponse({"error": "Invalid credentials"}, status=401)
 
-            return JsonResponse({
-                "message": "Login successful",
-                "user": username
-            }, status=200)
-
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    return JsonResponse({"error": "Method not allowed"}, status=405)
+    return JsonResponse({"error": "Use POST"}, status=405)
 
 
 def protected_view(request):
-    username = request.session.get("username")
-
-    if not username:
-        return JsonResponse(
-            {"error": "Unauthorized. Please log in."},
-            status=401
-        )
-
-    return JsonResponse({
-        "message": "You are authenticated",
-        "user": username
-    }, status=200)
+    if request.user.is_authenticated:
+        return JsonResponse({"message": "Authenticated", "user": request.user.username})
+    return JsonResponse({"error": "Unauthorized"}, status=401)
 
 
 def logout_view(request):
-    if request.method != "POST":
-        return JsonResponse(
-            {"error": "Use POST to log out"},
-            status=405
-        )
-
-    request.session.flush()
-    return JsonResponse({"message": "Logged out successfully"}, status=200)
+    if request.method == "POST":
+        logout(request)
+        return JsonResponse({"message": "Logged out"})
+    return JsonResponse({"error": "Use POST"}, status=405)

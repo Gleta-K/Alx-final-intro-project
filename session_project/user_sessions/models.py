@@ -11,3 +11,12 @@ class UserSession(models.Model):
 
     def __str__(self):
         return f"{self.user.username} session"
+
+class MonitoredApp(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    app_name = models.CharField(max_length=100)
+    session_duration = models.IntegerField()  # minutes
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.app_name}"
