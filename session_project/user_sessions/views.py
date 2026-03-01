@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from .models import UserSession
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 # Create your views here.
 # LOGIN
