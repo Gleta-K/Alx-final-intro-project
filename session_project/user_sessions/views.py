@@ -10,7 +10,8 @@ from .models import MonitoredApp, AppSession
 from .serializers import (
     UserSerializer,
     MonitoredAppSerializer,
-    AppSessionSerializer
+    AppSessionSerializer,
+    LoginSerializer
 )
 
 
@@ -19,20 +20,18 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
 
-class LoginView(APIView):
+class LoginView(generics.GenericAPIView):
+    serializer_class = LoginSerializer
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        user = authenticate(
-            username=request.data.get("username"),
-            password=request.data.get("password")
-        )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if user:
-            token, _ = Token.objects.get_or_create(user=user)
-            return Response({"token": token.key})
+        user = serializer.validated_data["user"]
+        token, _ = Token.objects.get_or_create(user=user)
 
-        return Response({"error": "Invalid credentials"}, status=401)
+        return Response({"token": token.key})
 
 
 class AddAppView(generics.CreateAPIView):
