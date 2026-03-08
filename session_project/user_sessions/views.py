@@ -2,7 +2,6 @@ from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
-from django.contrib.auth import authenticate
 from django.utils import timezone
 from datetime import timedelta
 
@@ -18,7 +17,6 @@ from .serializers import (
 class RegisterView(generics.CreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]
-
 
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
@@ -47,6 +45,13 @@ class MyAppsView(generics.ListAPIView):
     def get_queryset(self):
         return MonitoredApp.objects.filter(user=self.request.user)
 
+def check_session_limit(session):
+    limit = session.monitored_app.session_limit_minutes
+    end_time = session.start_time + timedelta(minutes=limit)
+
+    if timezone.now() >= end_time:
+        session.is_active = False
+        session.save()
 
 class StartSessionView(generics.CreateAPIView):
     serializer_class = AppSessionSerializer
@@ -73,3 +78,16 @@ class CheckSessionView(APIView):
 
         except AppSession.DoesNotExist:
             return Response({"error": "Session not found"}, status=404)
+
+
+class SessionListView(generics.ListAPIView):
+    serializer_class = AppSessionSerializer
+
+    def get_queryset(self):
+        sessions = AppSession.objects.filter(user=self.request.user)
+
+        for session in sessions:
+            if session.is_active:
+                check_session_limit(session)
+
+        return sessions
