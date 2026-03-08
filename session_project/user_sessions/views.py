@@ -87,7 +87,8 @@ class SessionListView(generics.ListAPIView):
         sessions = AppSession.objects.filter(user=self.request.user)
 
         for session in sessions:
-            if session.is_active:
-                check_session_limit(session)
+            if session.is_active and session.has_expired():
+                session.is_active = False
+                session.save()
 
         return sessions
